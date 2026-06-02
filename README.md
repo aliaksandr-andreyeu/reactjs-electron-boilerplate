@@ -53,8 +53,8 @@ npm run make
 
 After `npm start`, use the top navigation:
 
-1. **File** — click **Open file** to load a `.txt` file.
-2. **API client** — switch between **REST API** and **WebSocket** sub-tabs.
+1. **File** - click **Open file** to load a `.txt` file.
+2. **API client** - switch between **REST API** and **WebSocket** sub-tabs.
 
 ## Scripts
 
@@ -114,7 +114,7 @@ tests/
 └────────┬────────┘                                 └──────────────────┘
          │
          ├── fs / dialog (file open)
-         ├── fetch (HTTP from main — no CORS in renderer)
+         ├── fetch (HTTP from main - no CORS in renderer)
          ├── WebSocket (main process)
          └── electron-store (persistentGet / persistentSet)
 ```
@@ -139,8 +139,8 @@ Renderer code should **only** talk to the main process through this API.
 
 ### State management
 
-- **File store** (`entities/file/model/store.ts`) — file path, content, loading, errors.
-- **API store** (`entities/apiRequest/model/store.ts`) — REST/WebSocket form state, responses, messages, history. History is persisted with `electronPersist` (wrapper around `persistentSet` / `persistentGet`).
+- **File store** (`entities/file/model/store.ts`) - file path, content, loading, errors.
+- **API store** (`entities/apiRequest/model/store.ts`) - REST/WebSocket form state, responses, messages, history. History is persisted with `electronPersist` (wrapper around `persistentSet` / `persistentGet`).
 
 ### Theming
 
@@ -152,14 +152,15 @@ Renderer code should **only** talk to the main process through this API.
 
 | File | Purpose |
 |------|---------|
-| `tsconfig.json` | TypeScript compiler options |
+| `tsconfig.json` | TypeScript (app + tests) |
+| `tsconfig.node.json` | TypeScript (Vite/Forge configs) |
 | `vite.main.config.ts` | Main process bundle |
 | `vite.preload.config.ts` | Preload bundle |
 | `vite.renderer.config.ts` | React renderer bundle |
 | `forge.config.ts` | Electron Forge makers & Vite plugin |
 | `vitest.config.ts` | Unit test runner |
 | `playwright.config.ts` | E2E test runner |
-| `eslint.config.js` | ESLint flat config |
+| `eslint.config.mjs` | ESLint flat config |
 
 ## CI & dependencies
 
@@ -200,10 +201,10 @@ Runs `npm run package` first, then Playwright against the packaged Electron app 
 
 ## Extending the boilerplate
 
-1. **Add IPC** — extend `ElectronAPI` in `common/electronApi.ts`, implement handler in `main.ts`, expose in `preload.ts`.
-2. **Add a feature** — create `features/myFeature/ui/` and wire it from a page.
-3. **Add persistence** — wrap a Zustand store with `electronPersist` from `shared/lib/persistElectronStore.ts`.
-4. **Add makers** — configure DEB/RPM/Squirrel in `forge.config.ts`.
+1. **Add IPC** - extend `ElectronAPI` in `common/electronApi.ts`, implement handler in `main.ts`, expose in `preload.ts`.
+2. **Add a feature** - create `features/myFeature/ui/` and wire it from a page.
+3. **Add persistence** - wrap a Zustand store with `electronPersist` from `shared/lib/persistElectronStore.ts`.
+4. **Add makers** - configure DEB/RPM/Squirrel in `forge.config.ts`.
 
 ## Tech stack
 

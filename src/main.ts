@@ -2,12 +2,39 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import Store from 'electron-store';
+import * as Sentry from '@sentry/electron/main';
 import type { FileDialogResult, HttpRequestConfig, HttpResponse } from './common/electronApi';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
+const isE2E = process.env.E2E_TEST === 'true';
+const sentryDsn = process.env.SENTRY_DSN;
+
+if (sentryDsn && !isE2E) {
+  Sentry.init({
+    dsn: sentryDsn,
+    environment: process.env.NODE_ENV ?? 'production',
+    tracesSampleRate: 0.1,
+  });
+}
+
 let mainWindow: BrowserWindow | null = null;
+let memoryInterval: ReturnType<typeof setInterval> | null = null;
+
+function reportMemoryUsage(): void {
+  if (!sentryDsn || isE2E) return;
+  const mem = process.memoryUsage();
+  Sentry.setContext('memory', {
+    rss_mb: Math.round(mem.rss / 1024 / 1024),
+    heapUsed_mb: Math.round(mem.heapUsed / 1024 / 1024),
+  });
+}
+
+function startMemoryReporting(): void {
+  if (memoryInterval) return;
+  memoryInterval = setInterval(reportMemoryUsage, 60_000);
+}
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
@@ -24,16 +51,21 @@ const createWindow = () => {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
     mainWindow.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
+      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
     );
   }
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (sentryDsn && !isE2E) {
+      Sentry.startSpan({ name: 'window.load', op: 'ui.load' }, () => undefined);
+    }
+  });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.webContents.openDevTools();
   }
 };
 
-// Persistent store
 const persistentStore = new Store({
   name: 'app-persistent-state',
   encryptionKey: 'mySecret',
@@ -44,13 +76,9 @@ const persistentStore = new Store({
   },
 });
 
-const isE2E = process.env.E2E_TEST === 'true';
-
-app.whenReady().then(() => {
-  // Ping
+function registerIpcHandlers(): void {
   ipcMain.handle('ping', () => 'pong');
 
-  // Open file dialog
   if (isE2E) {
     ipcMain.handle('open-file-dialog', async (): Promise<FileDialogResult> => ({
       filePath: 'test.txt',
@@ -69,8 +97,8 @@ app.whenReady().then(() => {
       }
 
       const filePath = result.filePaths[0];
+      if (!filePath) return null;
 
-      if (!filePath) { return null; }
       try {
         const content = fs.readFileSync(filePath, { encoding: 'utf-8' });
         return { filePath, content };
@@ -80,7 +108,6 @@ app.whenReady().then(() => {
     });
   }
 
-  // HTTP request
   if (isE2E) {
     ipcMain.handle('http-request', async (_, config: HttpRequestConfig): Promise<HttpResponse> => ({
       status: 200,
@@ -89,26 +116,32 @@ app.whenReady().then(() => {
     }));
   } else {
     ipcMain.handle('http-request', async (_, config: HttpRequestConfig): Promise<HttpResponse> => {
-      try {
-        const response = await fetch(config.url, {
-          method: config.method,
-          headers: config.headers,
-          body: config.body || undefined,
-        });
-        const data = await response.text();
-        return {
-          status: response.status,
-          headers: Object.fromEntries(response.headers.entries()),
-          data,
-        };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        return { error: message };
+      const handler = async (): Promise<HttpResponse> => {
+        try {
+          const response = await fetch(config.url, {
+            method: config.method,
+            headers: config.headers,
+            body: config.body || undefined,
+          });
+          const data = await response.text();
+          return {
+            status: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+            data,
+          };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          return { error: message };
+        }
+      };
+
+      if (sentryDsn) {
+        return Sentry.startSpan({ name: 'ipc.http-request', op: 'ipc' }, handler);
       }
+      return handler();
     });
   }
 
-  // WebSocket using the built-in WebSocket class
   const wsConnections = new Map<number, WebSocket>();
 
   ipcMain.handle('ws-connect', (event, url: string): number => {
@@ -152,19 +185,32 @@ app.whenReady().then(() => {
     }
   });
 
-  // Persistent store IPC
-  ipcMain.handle('persistent-get', (_, key: string) => {
-    return persistentStore.get(key);
-  });
+  ipcMain.handle('persistent-get', (_, key: string) => persistentStore.get(key));
 
   ipcMain.handle('persistent-set', (_, key: string, value: unknown) => {
     persistentStore.set(key, value);
     return true;
   });
+}
 
-  createWindow();
+app.whenReady().then(() => {
+  const startup = () => {
+    registerIpcHandlers();
+    createWindow();
+    startMemoryReporting();
+  };
+
+  if (sentryDsn && !isE2E) {
+    Sentry.startSpan({ name: 'app.startup', op: 'app.lifecycle' }, startup);
+  } else {
+    startup();
+  }
 });
 
 app.on('window-all-closed', () => {
+  if (memoryInterval) {
+    clearInterval(memoryInterval);
+    memoryInterval = null;
+  }
   if (process.platform !== 'darwin') app.quit();
 });

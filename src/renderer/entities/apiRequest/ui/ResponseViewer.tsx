@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useApiStore } from '../model/store';
-import { Button } from '../../../shared/ui/Button/Button';
+import { useApiStore } from '@entities/apiRequest/model/store';
+import { Button } from '@shared/ui/Button/Button';
 
 function statusVariant(status: number): string {
   if (status >= 200 && status < 300) return 'status-badge--success';
@@ -12,7 +12,6 @@ function statusVariant(status: number): string {
 function tryFormatJson(text: string): { formatted: string; isJson: boolean } {
   const trimmed = text.trim();
   if (!trimmed) return { formatted: text, isJson: false };
-  // Fast path: likely JSON
   if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
     return { formatted: text, isJson: false };
   }
@@ -24,12 +23,34 @@ function tryFormatJson(text: string): { formatted: string; isJson: boolean } {
   }
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export const ResponseViewer: React.FC = () => {
   const response = useApiStore((s) => s.restResponse);
+  const meta = useApiStore((s) => s.restResponseMeta);
+  const loading = useApiStore((s) => s.restLoading);
   const [copied, setCopied] = useState(false);
   const [pretty, setPretty] = useState(true);
 
-  if (!response) return null;
+  if (loading) {
+    return (
+      <div className="response-viewer response-viewer--empty">
+        <p className="response-viewer__placeholder">Sending request…</p>
+      </div>
+    );
+  }
+
+  if (!response) {
+    return (
+      <div className="response-viewer response-viewer--empty">
+        <p className="response-viewer__placeholder">Send a request to see the response</p>
+      </div>
+    );
+  }
 
   const rawText = response.error ?? response.data ?? '';
   const formatted = response.error ? { formatted: rawText, isJson: false } : tryFormatJson(rawText);
@@ -53,29 +74,39 @@ export const ResponseViewer: React.FC = () => {
     <div className="response-viewer">
       <div className="response-viewer__header">
         <h4 className="response-viewer__title">Response</h4>
-        {!response.error && response.status !== undefined && (
-          <span className={`status-badge ${statusVariant(response.status)}`}>
-            {response.status}
-          </span>
-        )}
-        {!response.error && formatted.isJson && (
-          <Button
-            variant="secondary"
-            className="response-viewer__toggle"
-            onClick={() => setPretty((v) => !v)}
-          >
-            {pretty ? 'Pretty' : 'Raw'}
-          </Button>
-        )}
-        {textToCopy && (
-          <Button
-            variant="secondary"
-            className="response-viewer__copy"
-            onClick={handleCopy}
-          >
-            {copied ? 'Copied' : 'Copy'}
-          </Button>
-        )}
+        <div className="response-viewer__meta">
+          {!response.error && response.status !== undefined && (
+            <span className={`status-badge ${statusVariant(response.status)}`}>
+              {response.status}
+            </span>
+          )}
+          {meta && (
+            <>
+              <span className="response-viewer__stat">{meta.durationMs} ms</span>
+              <span className="response-viewer__stat">{formatBytes(meta.bodySize)}</span>
+            </>
+          )}
+        </div>
+        <div className="response-viewer__actions">
+          {!response.error && formatted.isJson && (
+            <Button
+              variant="secondary"
+              className="response-viewer__toggle"
+              onClick={() => setPretty((v) => !v)}
+            >
+              {pretty ? 'Pretty' : 'Raw'}
+            </Button>
+          )}
+          {textToCopy && (
+            <Button
+              variant="secondary"
+              className="response-viewer__copy"
+              onClick={handleCopy}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          )}
+        </div>
       </div>
       {!response.error && headerEntries.length > 0 && (
         <details className="response-viewer__details">
@@ -91,9 +122,9 @@ export const ResponseViewer: React.FC = () => {
         </details>
       )}
       {response.error ? (
-        <p className="error">{response.error}</p>
+        <p className="error response-viewer__body-error">{response.error}</p>
       ) : (
-        <pre>{displayText}</pre>
+        <pre className="response-viewer__body">{displayText}</pre>
       )}
     </div>
   );

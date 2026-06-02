@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { FileDialogResult } from '../../../../common/electronApi';
+import { getPlatform } from '@platform/registry';
+import type { FileDialogResult } from '@common/electronApi';
 
 interface FileState {
   fileContent: string | null;
@@ -17,7 +18,8 @@ export const useFileStore = create<FileState>((set) => ({
   openFile: async () => {
     set({ loading: true, error: null });
     try {
-      const result: FileDialogResult | null = await window.electronAPI.openFileDialog();
+      const { fileDialog } = getPlatform();
+      const result: FileDialogResult | null = await fileDialog.open();
       if (!result) {
         set({ loading: false });
         return;
@@ -32,7 +34,7 @@ export const useFileStore = create<FileState>((set) => ({
         });
       }
     } catch {
-      set({ error: 'Failed to communicate with the main process', loading: false });
+      set({ error: 'Failed to open file', loading: false });
     }
   },
 }));
