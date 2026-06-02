@@ -83,7 +83,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist-web
           path: dist-web
@@ -100,7 +100,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dist-web
           path: dist-web
