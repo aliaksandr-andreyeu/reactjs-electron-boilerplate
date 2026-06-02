@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateHttpUrl, validateWebSocketUrl } from '../../src/renderer/shared/lib/validateUrl';
+import { validateHttpUrl, validateWebSocketUrl } from '@shared/lib/validateUrl';
 
 describe('validateHttpUrl', () => {
   it('rejects an empty URL', () => {

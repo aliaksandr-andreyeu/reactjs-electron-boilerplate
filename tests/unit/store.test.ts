@@ -1,13 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { useFileStore } from '../../src/renderer/entities/file/model/store';
-import type { FileDialogResult } from '../../src/common/electronApi';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { initPlatform } from '@platform/registry';
+import type { PlatformPorts } from '@platform/ports';
+import { useFileStore } from '@entities/file/model/store';
+import type { FileDialogResult } from '@common/electronApi';
 
-declare global {
-  interface Window {
-    electronAPI: {
-      openFileDialog: ReturnType<typeof vi.fn>;
-    };
-  }
+function createMockPorts(openFileDialog: () => Promise<FileDialogResult | null>): PlatformPorts {
+  return {
+    http: { request: vi.fn() },
+    ws: {
+      connect: vi.fn(),
+      send: vi.fn(),
+      close: vi.fn(),
+      onEvent: vi.fn(),
+      removeListener: vi.fn(),
+    },
+    storage: {
+      get: vi.fn().mockResolvedValue(undefined),
+      set: vi.fn().mockResolvedValue(undefined),
+    },
+    fileDialog: { open: openFileDialog },
+  };
 }
 
 describe('FileStore', () => {
@@ -18,21 +30,11 @@ describe('FileStore', () => {
       loading: false,
       error: null,
     });
-
-    (globalThis as Record<string, unknown>).window = {
-      electronAPI: {
-        openFileDialog: vi.fn(),
-      },
-    };
-  });
-
-  afterEach(() => {
-    delete (globalThis as Record<string, unknown>).window;
   });
 
   it('sets loading to true while openFile is in progress', async () => {
-    const mockFn = window.electronAPI.openFileDialog as ReturnType<typeof vi.fn>;
-    mockFn.mockResolvedValue(null);
+    const openMock = vi.fn().mockResolvedValue(null);
+    initPlatform(createMockPorts(openMock));
 
     const { openFile } = useFileStore.getState();
     const promise = openFile();
@@ -46,8 +48,8 @@ describe('FileStore', () => {
       filePath: '/test/file.txt',
       content: 'Hello from file',
     };
-    const mockFn = window.electronAPI.openFileDialog as ReturnType<typeof vi.fn>;
-    mockFn.mockResolvedValue(mockResult);
+    const openMock = vi.fn().mockResolvedValue(mockResult);
+    initPlatform(createMockPorts(openMock));
 
     await useFileStore.getState().openFile();
 
@@ -59,8 +61,8 @@ describe('FileStore', () => {
 
   it('sets error and clears content when IPC returns an error', async () => {
     const mockResult: FileDialogResult = { error: 'Read error' };
-    const mockFn = window.electronAPI.openFileDialog as ReturnType<typeof vi.fn>;
-    mockFn.mockResolvedValue(mockResult);
+    const openMock = vi.fn().mockResolvedValue(mockResult);
+    initPlatform(createMockPorts(openMock));
 
     await useFileStore.getState().openFile();
 

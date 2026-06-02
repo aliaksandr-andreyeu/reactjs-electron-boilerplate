@@ -1,29 +1,41 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { PlatformPorts } from '@platform/ports';
 
-function mockElectronApi() {
+function createMockPorts() {
   const persistent = new Map<string, unknown>();
-  return {
-    sendHttpRequest: vi.fn().mockResolvedValue({ status: 200, data: 'ok' }),
-    connectWebSocket: vi.fn().mockResolvedValue(1),
-    sendWsMessage: vi.fn(),
-    closeWebSocket: vi.fn(),
-    onWsEvent: vi.fn(),
-    removeWsListener: vi.fn(),
-    persistentGet: vi.fn(async (key: string) => persistent.get(key)),
-    persistentSet: vi.fn(async (key: string, value: unknown) => {
-      persistent.set(key, value);
-      return true;
-    }),
+  const ports: PlatformPorts = {
+    http: {
+      request: vi.fn().mockResolvedValue({ status: 200, data: 'ok' }),
+    },
+    ws: {
+      connect: vi.fn().mockResolvedValue(1),
+      send: vi.fn(),
+      close: vi.fn(),
+      onEvent: vi.fn(),
+      removeListener: vi.fn(),
+    },
+    storage: {
+      get: vi.fn(async (key: string) => persistent.get(key)),
+      set: vi.fn(async (key: string, value: unknown) => {
+        persistent.set(key, value);
+      }),
+    },
+    fileDialog: {
+      open: vi.fn().mockResolvedValue(null),
+    },
   };
+  return ports;
 }
 
 describe('ApiStore', () => {
+  let ports: PlatformPorts;
+
   beforeEach(async () => {
     vi.resetModules();
-    (globalThis as Record<string, unknown>).window = {
-      electronAPI: mockElectronApi(),
-    };
-    const { useApiStore } = await import('../../src/renderer/entities/apiRequest/model/store');
+    ports = createMockPorts();
+    const { initPlatform: init } = await import('@platform/registry');
+    init(ports);
+    const { useApiStore } = await import('@entities/apiRequest/model/store');
     useApiStore.setState({
       restUrl: '',
       restMethod: 'GET',
@@ -41,23 +53,19 @@ describe('ApiStore', () => {
       wsError: null,
       wsUrlError: null,
       wsHistory: [],
+      wsSubscriptions: [],
     });
   });
 
-  afterEach(() => {
-    delete (globalThis as Record<string, unknown>).window;
-    vi.restoreAllMocks();
-  });
-
   it('does not send HTTP when the URL is invalid', async () => {
-    const { useApiStore } = await import('../../src/renderer/entities/apiRequest/model/store');
+    const { useApiStore } = await import('@entities/apiRequest/model/store');
     await useApiStore.getState().sendHttp();
     expect(useApiStore.getState().restUrlError).toBeTruthy();
-    expect(window.electronAPI.sendHttpRequest).not.toHaveBeenCalled();
+    expect(ports.http.request).not.toHaveBeenCalled();
   });
 
   it('sets restLoading during HTTP request and clears it after completion', async () => {
-    const { useApiStore } = await import('../../src/renderer/entities/apiRequest/model/store');
+    const { useApiStore } = await import('@entities/apiRequest/model/store');
     useApiStore.setState({ restUrl: 'https://example.com/api' });
     const promise = useApiStore.getState().sendHttp();
     expect(useApiStore.getState().restLoading).toBe(true);
@@ -67,7 +75,7 @@ describe('ApiStore', () => {
   });
 
   it('appends the request to restHistory after a successful HTTP call', async () => {
-    const { useApiStore } = await import('../../src/renderer/entities/apiRequest/model/store');
+    const { useApiStore } = await import('@entities/apiRequest/model/store');
     useApiStore.setState({ restUrl: 'https://example.com/users' });
     await useApiStore.getState().sendHttp();
     expect(useApiStore.getState().restHistory).toHaveLength(1);
@@ -75,18 +83,18 @@ describe('ApiStore', () => {
   });
 
   it('does not connect WebSocket when the URL is invalid', async () => {
-    const { useApiStore } = await import('../../src/renderer/entities/apiRequest/model/store');
+    const { useApiStore } = await import('@entities/apiRequest/model/store');
     useApiStore.setState({ wsUrl: 'http://wrong' });
     await useApiStore.getState().connectWs();
     expect(useApiStore.getState().wsUrlError).toBeTruthy();
-    expect(window.electronAPI.connectWebSocket).not.toHaveBeenCalled();
+    expect(ports.ws.connect).not.toHaveBeenCalled();
   });
 
   it('calls connectWebSocket and sets wsConnecting for a valid URL', async () => {
-    const { useApiStore } = await import('../../src/renderer/entities/apiRequest/model/store');
+    const { useApiStore } = await import('@entities/apiRequest/model/store');
     useApiStore.setState({ wsUrl: 'wss://echo.example.com' });
     await useApiStore.getState().connectWs();
-    expect(window.electronAPI.connectWebSocket).toHaveBeenCalledWith('wss://echo.example.com');
+    expect(ports.ws.connect).toHaveBeenCalledWith('wss://echo.example.com');
     expect(useApiStore.getState().wsConnecting).toBe(true);
   });
 });

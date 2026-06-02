@@ -1,0 +1,6 @@
+name = "api-client-cors-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+ALLOWED_ORIGINS = "http://localhost:3000"

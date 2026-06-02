@@ -1,6 +1,6 @@
 import React from 'react';
-import { useFileStore } from '../../../entities/file/model/store';
-import { Button } from '../../../shared/ui/Button/Button';
+import { useFileStore } from '@entities/file/model/store';
+import { Button } from '@shared/ui/Button/Button';
 
 export const OpenFileButton: React.FC = () => {
   const loading = useFileStore((s) => s.loading);

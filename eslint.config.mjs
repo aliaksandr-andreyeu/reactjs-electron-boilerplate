@@ -7,7 +7,17 @@ import typescriptParser from '@typescript-eslint/parser';
 
 export default [
   {
-    ignores: ['dist', '.vite', 'out', 'node_modules', 'build', 'test-results'],
+    ignores: [
+      '**/node_modules/**',
+      'dist/**',
+      'dist-web/**',
+      '.vite/**',
+      'out/**',
+      'build/**',
+      'coverage/**',
+      'test-results/**',
+      'playwright-report/**',
+    ],
   },
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
@@ -38,7 +48,7 @@ export default [
 
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',
-      '@typescript-eslint/explicit-function-return-type': 'warn',
+      '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
