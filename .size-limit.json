@@ -1,0 +1,8 @@
+[
+  {
+    "name": "Web JS bundles (gzip)",
+    "path": "dist-web/assets/*.js",
+    "limit": "600 KB",
+    "gzip": true
+  }
+]

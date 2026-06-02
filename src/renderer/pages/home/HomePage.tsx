@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
-import { OpenFileButton } from '../../features/openFile/ui/OpenFileButton';
-import { FileContent } from '../../entities/file/ui/FileContent';
-import { ApiClientPanel } from '../../features/apiClient/ui/ApiClientPanel';
-import { useFileStore } from '../../entities/file/model/store';
-import { initTheme, toggleTheme, type Theme } from '../../shared/lib/theme';
-import { Button } from '../../shared/ui/Button/Button';
+import { OpenFileButton } from '@features/openFile/ui/OpenFileButton';
+import { FileContent } from '@entities/file/ui/FileContent';
+import { ApiClientPanel } from '@features/apiClient/ui/ApiClientPanel';
+import { useFileStore } from '@entities/file/model/store';
+import { initTheme, toggleTheme, type Theme } from '@shared/lib/theme';
+import { capturePageView } from '@shared/lib/monitoring';
+import { Button } from '@shared/ui/Button/Button';
 
 export const HomePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'file' | 'api'>('file');
+
+  const selectTab = (tab: 'file' | 'api') => {
+    setActiveTab(tab);
+    capturePageView(tab === 'file' ? '/file' : '/api');
+  };
   const [theme, setTheme] = useState<Theme>(() => initTheme());
   const isLoading = useFileStore((s) => s.loading);
   const hasContent = useFileStore((s) => s.fileContent !== null);
@@ -20,10 +26,10 @@ export const HomePage: React.FC = () => {
   return (
     <div className="app">
       <nav className="menu">
-        <button type="button" onClick={() => setActiveTab('file')} className={activeTab === 'file' ? 'active' : ''}>
+        <button type="button" onClick={() => selectTab('file')} className={activeTab === 'file' ? 'active' : ''}>
           File
         </button>
-        <button type="button" onClick={() => setActiveTab('api')} className={activeTab === 'api' ? 'active' : ''}>
+        <button type="button" onClick={() => selectTab('api')} className={activeTab === 'api' ? 'active' : ''}>
           API Client
         </button>
         {activeTab === 'file' && <OpenFileButton />}
@@ -36,7 +42,7 @@ export const HomePage: React.FC = () => {
           {theme === 'light' ? 'Dark' : 'Light'}
         </Button>
       </nav>
-      <main>
+      <main className={activeTab === 'api' ? 'main--api' : undefined}>
         {activeTab === 'file' && (
           <>
             <FileContent />

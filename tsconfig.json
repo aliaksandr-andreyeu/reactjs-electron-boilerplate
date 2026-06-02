@@ -22,7 +22,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
+      "@common/*": ["src/common/*"],
       "@renderer/*": ["src/renderer/*"],
+      "@platform/*": ["src/renderer/platform/*"],
       "@entities/*": ["src/renderer/entities/*"],
       "@features/*": ["src/renderer/features/*"],
       "@pages/*": ["src/renderer/pages/*"],
@@ -30,7 +32,7 @@
       "@widgets/*": ["src/renderer/widgets/*"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "tests"],
   "exclude": ["node_modules", "dist"]
 }
 

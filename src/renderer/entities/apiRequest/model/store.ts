@@ -1,8 +1,10 @@
 import { create } from 'zustand';
-import type { HttpRequestConfig, HttpResponse, WsEvent } from '../../../../common/electronApi';
-import { electronPersist } from '../../../shared/lib/persistElectronStore';
-import { createId } from '../../../shared/lib/id';
-import { validateHttpUrl, validateWebSocketUrl } from '../../../shared/lib/validateUrl';
+import type { HttpRequestConfig, HttpResponse, WsEvent } from '@common/electronApi';
+import { getPlatform } from '@platform/registry';
+import { electronPersist } from '@shared/lib/persistElectronStore';
+import { createId } from '@shared/lib/id';
+import { validateHttpUrl, validateWebSocketUrl } from '@shared/lib/validateUrl';
+import { captureEvent } from '@shared/lib/monitoring';
 import type { HeaderField, RestHistoryEntry, WsHistoryEntry, WsMessage } from './types';
 import {
   applySubscriptionControl,
@@ -41,6 +43,20 @@ function pushWsHistory(history: WsHistoryEntry[], url: string): WsHistoryEntry[]
   return [next, ...filtered].slice(0, MAX_HISTORY);
 }
 
+export interface RestResponseMeta {
+  durationMs: number;
+  bodySize: number;
+}
+
+function bodyByteSize(text: string | undefined): number {
+  if (!text) return 0;
+  return new TextEncoder().encode(text).length;
+}
+
+function findAuthorizationIndex(headers: HeaderField[]): number {
+  return headers.findIndex((h) => h.key.toLowerCase() === 'authorization');
+}
+
 function createWsMessage(text: string, incoming: boolean): WsMessage {
   return {
     id: createId('msg'),
@@ -56,6 +72,7 @@ interface ApiRequestState {
   restHeaders: HeaderField[];
   restBody: string;
   restResponse: HttpResponse | null;
+  restResponseMeta: RestResponseMeta | null;
   restLoading: boolean;
   restUrlError: string | null;
   restHistory: RestHistoryEntry[];
@@ -77,6 +94,7 @@ interface ApiRequestState {
   addHeader: () => void;
   removeHeader: (id: string) => void;
   updateHeader: (id: string, key: string, value: string) => void;
+  setBearerToken: (token: string) => void;
   sendHttp: () => Promise<void>;
   connectWs: () => Promise<void>;
   sendWs: (message: string) => void;
@@ -101,6 +119,7 @@ export const useApiStore = create<ApiRequestState>()(
     restHeaders: [createHeader()],
     restBody: '',
     restResponse: null,
+    restResponseMeta: null,
     restLoading: false,
     restUrlError: null,
     restHistory: [],
@@ -137,6 +156,36 @@ export const useApiStore = create<ApiRequestState>()(
         ),
       })),
 
+    setBearerToken: (token) =>
+      set((state) => {
+        const trimmed = token.trim();
+        const authIndex = findAuthorizationIndex(state.restHeaders);
+        const authHeader = authIndex >= 0 ? state.restHeaders[authIndex] : undefined;
+
+        if (!trimmed) {
+          if (!authHeader) return state;
+          return {
+            restHeaders: state.restHeaders.filter((h) => h.id !== authHeader.id),
+          };
+        }
+
+        const value = `Bearer ${trimmed}`;
+        if (authHeader) {
+          return {
+            restHeaders: state.restHeaders.map((h) =>
+              h.id === authHeader.id ? { ...h, key: 'Authorization', value } : h,
+            ),
+          };
+        }
+
+        return {
+          restHeaders: [
+            ...state.restHeaders,
+            { id: createId('hdr'), key: 'Authorization', value },
+          ],
+        };
+      }),
+
     sendHttp: async () => {
       const { restUrl, restMethod, restHeaders, restBody } = get();
       const validation = validateHttpUrl(restUrl);
@@ -145,7 +194,7 @@ export const useApiStore = create<ApiRequestState>()(
         return;
       }
 
-      set({ restLoading: true, restUrlError: null });
+      set({ restLoading: true, restUrlError: null, restResponseMeta: null });
       const headersObj: Record<string, string> = Object.fromEntries(
         restHeaders.filter((h) => h.key).map((h) => [h.key, h.value]),
       );
@@ -156,10 +205,15 @@ export const useApiStore = create<ApiRequestState>()(
         body: restBody || undefined,
       };
 
+      const start = performance.now();
       try {
-        const result = await window.electronAPI.sendHttpRequest(config);
+        const { http } = getPlatform();
+        const result = await http.request(config);
+        const durationMs = Math.round(performance.now() - start);
+        const bodyText = result.error ?? result.data ?? '';
         set((state) => ({
           restResponse: result,
+          restResponseMeta: { durationMs, bodySize: bodyByteSize(bodyText) },
           restLoading: false,
           restHistory: pushRestHistory(state.restHistory, {
             url: restUrl.trim(),
@@ -169,9 +223,11 @@ export const useApiStore = create<ApiRequestState>()(
           }),
         }));
       } catch {
+        const durationMs = Math.round(performance.now() - start);
         set({
           restLoading: false,
-          restResponse: { error: 'Failed to communicate with the main process' },
+          restResponse: { error: 'Failed to send request' },
+          restResponseMeta: { durationMs, bodySize: bodyByteSize('Failed to send request') },
         });
       }
     },
@@ -193,23 +249,24 @@ export const useApiStore = create<ApiRequestState>()(
       });
 
       try {
-        const id = await window.electronAPI.connectWebSocket(wsUrl.trim());
+        const { ws } = getPlatform();
+        const id = await ws.connect(wsUrl.trim());
         set({ wsId: id });
 
-        window.electronAPI.onWsEvent<string>((event: WsEvent) => {
+        ws.onEvent<string>((event: WsEvent) => {
           if (event.id !== id) return;
 
           if (event.type === 'open') {
+            captureEvent('ws_connected');
             set((state) => ({
               wsConnected: true,
               wsConnecting: false,
               wsHistory: pushWsHistory(state.wsHistory, wsUrl.trim()),
             }));
-            // Re-subscribe after reconnect
             const { wsId, wsSubscriptions } = get();
             if (wsId !== null && wsSubscriptions.length > 0) {
               wsSubscriptions.forEach((channel) => {
-                window.electronAPI.sendWsMessage(wsId, { type: 'subscribe', channel });
+                ws.send(wsId, { type: 'subscribe', channel });
               });
             }
           } else if (event.type === 'message' && event.data !== undefined) {
@@ -226,8 +283,9 @@ export const useApiStore = create<ApiRequestState>()(
               wsId: null,
               wsError: event.error ?? 'WebSocket error',
             });
-            window.electronAPI.removeWsListener();
+            ws.removeListener();
           } else if (event.type === 'close') {
+            captureEvent('ws_disconnected', { reason: event.reason ?? '' });
             set({
               wsConnected: false,
               wsConnecting: false,
@@ -236,7 +294,7 @@ export const useApiStore = create<ApiRequestState>()(
                 ? `Connection closed: ${event.reason}`
                 : null,
             });
-            window.electronAPI.removeWsListener();
+            ws.removeListener();
           }
         });
       } catch (err) {
@@ -253,7 +311,8 @@ export const useApiStore = create<ApiRequestState>()(
     sendWs: (message) => {
       const { wsId } = get();
       if (wsId === null) return;
-      window.electronAPI.sendWsMessage(wsId, message);
+      const { ws } = getPlatform();
+      ws.send(wsId, message);
       const control = parseOutgoingSubscriptionControl(message);
       set((state) => ({
         wsSubscriptions: control
@@ -269,7 +328,8 @@ export const useApiStore = create<ApiRequestState>()(
       const { wsId } = get();
       if (wsId === null) return;
 
-      window.electronAPI.sendWsMessage(wsId, { type: 'subscribe', channel: normalized });
+      const { ws } = getPlatform();
+      ws.send(wsId, { type: 'subscribe', channel: normalized });
       set((state) => ({
         wsSubscriptions: applySubscriptionControl(state.wsSubscriptions, {
           type: 'subscribe',
@@ -288,7 +348,8 @@ export const useApiStore = create<ApiRequestState>()(
       const { wsId } = get();
       if (wsId === null) return;
 
-      window.electronAPI.sendWsMessage(wsId, { type: 'unsubscribe', channel: normalized });
+      const { ws } = getPlatform();
+      ws.send(wsId, { type: 'unsubscribe', channel: normalized });
       set((state) => ({
         wsSubscriptions: applySubscriptionControl(state.wsSubscriptions, {
           type: 'unsubscribe',
@@ -304,8 +365,9 @@ export const useApiStore = create<ApiRequestState>()(
     disconnectWs: () => {
       const { wsId } = get();
       if (wsId !== null) {
-        window.electronAPI.closeWebSocket(wsId);
-        window.electronAPI.removeWsListener();
+        const { ws } = getPlatform();
+        ws.close(wsId);
+        ws.removeListener();
       }
       set({ wsConnected: false, wsConnecting: false, wsId: null });
     },

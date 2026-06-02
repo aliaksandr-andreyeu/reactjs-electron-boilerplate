@@ -82,6 +82,14 @@ main {
   background: var(--color-bg);
 }
 
+main.main--api {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 main > p {
   color: var(--color-text-secondary);
   text-align: center;
