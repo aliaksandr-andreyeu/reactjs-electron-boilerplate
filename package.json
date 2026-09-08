@@ -72,12 +72,12 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "@sentry/electron": "^7.17.0",
-    "@sentry/react": "^10.71.0",
+    "@sentry/electron": "^7.18.0",
+    "@sentry/react": "^10.73.0",
     "@tanstack/react-query": "^5.102.8",
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^11.0.2",
-    "posthog-js": "^1.422.2",
+    "posthog-js": "^1.427.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "web-vitals": "^6.2.1",
