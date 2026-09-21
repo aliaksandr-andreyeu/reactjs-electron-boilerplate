@@ -50,8 +50,8 @@
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/electron-store": "^3.2.2",
     "@types/eslint": "~9.6.1",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@typescript-eslint/eslint-plugin": "^8.61.1",
     "@typescript-eslint/parser": "^8.61.1",
     "@vitest/coverage-v8": "^4.1.9",
@@ -72,15 +72,15 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "@sentry/electron": "^7.18.0",
-    "@sentry/react": "^10.73.0",
-    "@tanstack/react-query": "^5.102.8",
+    "@sentry/electron": "^7.19.0",
+    "@sentry/react": "^10.75.0",
+    "@tanstack/react-query": "^5.103.1",
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^11.0.2",
-    "posthog-js": "^1.427.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "web-vitals": "^6.2.1",
+    "posthog-js": "^1.434.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "web-vitals": "^6.2.2",
     "zustand": "^5.0.15"
   }
 }
